@@ -1,0 +1,7 @@
+{
+  "source_bucket": "source-bucket-name",
+  "source_key": "input/data.csv",
+  "destination_bucket": "destination-bucket-name",
+  "destination_key": "output/cleaned_data.csv"
+}
+
