@@ -1,0 +1,119 @@
+pipeline {
+    agent any
+
+    environment {
+        TF_VERSION = '1.6.0'
+        AWS_REGION = 'us-east-1'
+        ENV = 'dev' // Can be overridden via parameter or branch name
+        TF_WORKSPACE = "${ENV}"
+        CREDENTIALS_ID = 'aws-credentials-id' // Jenkins credentials
+    }
+
+    options {
+        timestamps()
+        ansiColor('xterm')
+    }
+
+    parameters {
+        choice(name: 'ENV', choices: ['dev', 'staging', 'prod'], description: 'Choose the environment to deploy')
+        booleanParam(name: 'AUTO_APPROVE', defaultValue: false, description: 'Automatically apply changes?')
+    }
+
+    stages {
+
+        stage('Checkout') {
+            steps {
+                git branch: 'main', url: 'https://github.com/your-org/your-terraform-repo.git'
+            }
+        }
+
+        stage('Install Terraform') {
+            steps {
+                sh '''
+                    wget https://releases.hashicorp.com/terraform/${TF_VERSION}/terraform_${TF_VERSION}_linux_amd64.zip
+                    unzip terraform_${TF_VERSION}_linux_amd64.zip
+                    sudo mv terraform /usr/local/bin/
+                    terraform -version
+                '''
+            }
+        }
+
+        stage('Terraform Init') {
+            steps {
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: "${CREDENTIALS_ID}"]]) {
+                    sh '''
+                        cd terraform/${ENV}
+                        terraform init -backend-config="region=${AWS_REGION}"
+                    '''
+                }
+            }
+        }
+
+        stage('Terraform Workspace') {
+            steps {
+                sh '''
+                    cd terraform/${ENV}
+                    terraform workspace select ${TF_WORKSPACE} || terraform workspace new ${TF_WORKSPACE}
+                '''
+            }
+        }
+
+        stage('Terraform Validate') {
+            steps {
+                sh '''
+                    cd terraform/${ENV}
+                    terraform validate
+                '''
+            }
+        }
+
+        stage('Terraform Plan') {
+            steps {
+                sh '''
+                    cd terraform/${ENV}
+                    terraform plan -out=tfplan -input=false
+                '''
+            }
+        }
+
+        stage('Approval (for production)') {
+            when {
+                expression { params.ENV == 'prod' && !params.AUTO_APPROVE }
+            }
+            steps {
+                input message: 'Apply changes to production?', ok: 'Yes, apply'
+            }
+        }
+
+        stage('Terraform Apply') {
+            steps {
+                script {
+                    def applyCommand = "terraform apply -input=false"
+                    if (params.AUTO_APPROVE) {
+                        applyCommand += " -auto-approve"
+                    } else {
+                        applyCommand += " tfplan"
+                    }
+
+                    sh """
+                        cd terraform/${ENV}
+                        ${applyCommand}
+                    """
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo 'Terraform deployment succeeded.'
+        }
+        failure {
+            echo 'Terraform deployment failed.'
+        }
+        always {
+            cleanWs()
+        }
+    }
+}
+
