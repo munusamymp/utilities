@@ -42,7 +42,30 @@ extract_data_from_csv = BashOperator(
 # The third task
 extract_data_from_tsv = BashOperator(
     task_id='extract_data_from_tsv',
-    bash_command='cut -f5,6,7 /home/project/airflow/dags/finalassignment/tollplaza-data.tsv | tr "\t" "," > /home/project/airflow/dags/finalassignment/tsv_data.csv',
+    bash_command='tr "\t" "," < /home/project/airflow/dags/finalassignment/tollplaza-data.tsv | tr -d "\r" | cut -d, -f5,6,7 > /home/project/airflow/dags/finalassignment/tsv_data.csv',
     dag=dag,
 )
 
+# The fourth task
+extract_data_from_fixed_width = BashOperator(
+    task_id='extract_data_from_fixed_width',
+    bash_command='cut -c59-62,63-68 /home/project/airflow/dags/finalassignment/payment-data.txt | tr " " "," > /home/project/airflow/dags/finalassignment/fixed_width_data.csv',
+    dag=dag,
+)
+
+# The fourth task
+consolidate_data = BashOperator(
+    task_id='consolidate_data',
+    bash_command='paste -d, /home/project/airflow/dags/finalassignment/csv_data.csv /home/project/airflow/dags/finalassignment/tsv_data.csv /home/project/airflow/dags/finalassignment/fixed_width_data.csv > /home/project/airflow/dags/finalassignment/extracted_data.csv',
+    dag=dag,
+)
+
+# The fifth task
+transform_data = BashOperator(
+    task_id='transform_data',
+    bash_command='tr "[:lower:]" "[:upper:]" < /home/project/airflow/dags/finalassignment/extracted_data.csv > /home/project/airflow/dags/finalassignment/staging/transform_data.csv',
+    dag=dag,
+)
+
+# task pipeline
+unzip_data >> extract_data_from_csv >> extract_data_from_tsv >> extract_data_from_fixed_width >> consolidate_data >> transform_data
