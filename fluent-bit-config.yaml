@@ -1,0 +1,23 @@
+[SERVICE]
+    Parsers_File parsers.conf
+    # Optional: adjust log level and other global settings
+
+[INPUT]
+    Name tail
+    Path /path/to/log/directory/*.log
+    Tag logs.firehose
+    Refresh_Interval 10
+    DB /var/log/fluent-bit/flb_tailed.db
+    # Set parser if logs are structured (e.g., JSON)
+    Parser json
+
+[OUTPUT]
+    Name kinesis_firehose
+    Match logs.firehose
+    region us-east-1
+    delivery_stream my-firehose-stream
+    # Optional: additional settings
+    time_key timestamp
+    compression gzip
+    # If needed: role_arn arn:aws:iam::<account>:role/FirehoseRole
+
